@@ -1,0 +1,81 @@
+netflix
+sales=netflix[,3]
+
+#---Creating a time-series object---#
+data=ts(sales,start=c(2000,1),frequency = 4)
+data
+
+#---Plotting it----#
+autoplot(data)
+
+
+#---Decomposing it and plotting the decomposition----#
+dec=decompose(data)
+
+plot(decompose(data))
+
+#--Checking the strength of trend and seasonality for Netflix data---#
+1-var(dec$random,na.rm=TRUE)/var((dec$trend+dec$random),na.rm=TRUE)
+1-var(dec$random,na.rm=TRUE)/var((dec$seasonal+dec$random),na.rm=TRUE)
+
+
+#---Now doing an stl decomposition---#
+decomp=stl(data,t.window = 5,s.window="periodic", robust=TRUE)
+decomp
+
+#---Plotting the stl decomposition---#
+autoplot(decomp)+
+  ggtitle("stl decomposition of Netflix data")
+
+#---Checking seasonality through polar-plot---#
+ggseasonplot(data, year.labels=FALSE, continuous=TRUE, polar = TRUE)+
+  ggtitle("Seasonality through polarmap for Netflix sales figures")
+
+#---Checking seasonality through heatmap---#
+Time.Stamp=seq(1,nrow(netflix),1)
+data.modified=cbind(Time.Stamp,netflix)
+ggplot(data.modified,aes(x = Time.Stamp, y = 1)) +
+  geom_tile(aes(fill = sales)) +
+  scale_fill_gradient2(low = "navy", mid = "yellow",
+                       high = "red", midpoint=28) + ggtitle("Seasonality through heatmap for Netflix sales")+
+  ylab("") + scale_y_discrete(expand=c(0,0))
+
+##############################
+##############################
+#---Now creating a lag-plot---#
+##############################
+##############################
+gglagplot(data,lags=25,set.lags = 1:25)+
+  ggtitle("Lag plots, Netflix Sales")
+
+#----Now creating an ACF plot---#
+ggAcf(data,lag.max = 25)+ggtitle("ACF plot for Netflix sales data")
+
+#---Now creating a tapered ACF plot---#
+ggtaperedacf(data,lag.max=25,calc.ci = T,level=95,nsim = 100)+
+  ggtitle("Tapered ACF plot for Netflix sales data")
+
+##################
+###################
+###################
+#----Nomality checking-----#
+##################
+###################
+###################
+dec$random
+gghistogram(dec$random)
+ggAcf(dec$random,lag.max=20)
+
+#---Naive modeling---#
+fitted(naive(data))
+#compare#
+autoplot(data)+autolayer(fitted(naive(data)))+ggtitle("Tracking real and naively predicted Netflix sales")
+#--extract residuals--#
+naive.model.resid=residuals(naive(data))
+naive.model.resid
+#--another way of extracting residuals---#
+diff(sales)
+#--checking normality---#
+gghistogram(naive.model.resid)
+ggAcf(naive.model.resid,lag.max=20)
+autoplot(naive.model.resid)+ggtitle("Naive residuals showing reasonable stationarity")

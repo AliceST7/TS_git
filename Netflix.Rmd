@@ -1,0 +1,231 @@
+---
+title: "Netflix"
+author: "Alice ST"
+date: "3/17/2020"
+output: html_document
+---
+```{r,include=FALSE}
+library(forecast)
+library(fpp2)
+library(ggplot2)
+library(TSclust)
+```
+
+```{r}
+# import netflix.txt
+netflix <- read.delim("~/Desktop/MA611/data/netflix.txt")
+```
+
+```{r}
+#---Creating a time-series object---#
+sales=netflix[,3]
+data=ts(sales,start=c(2000,1),frequency = 4)
+
+#---Plotting it----#
+autoplot(data) + ggtitle("Netflix Quartly Sales from 2000 to 2009")
+```
+
+```{r}
+#---Checking seasonality through polar-plot---#
+ggseasonplot(data, year.labels=FALSE, continuous=TRUE, polar = TRUE)+
+  ggtitle("Seasonality through polarmap for Netflix sales figures")
+
+#---Checking seasonality through heatmap---#
+Time.Stamp=seq(1,nrow(netflix),1)
+data.modified=cbind(Time.Stamp,netflix)
+ggplot(data.modified,aes(x = Time.Stamp, y = 1)) +
+  geom_tile(aes(fill = sales)) +
+  scale_fill_gradient2(low = "navy", mid = "yellow",
+                       high = "red", midpoint=28) + ggtitle("Seasonality through heatmap for Netflix sales")+
+  ylab("") + scale_y_discrete(expand=c(0,0))
+```
+
+```{r}
+# Classic Decomposition
+#---Decomposing it and plotting the decomposition----#
+dec=decompose(data)
+plot(decompose(data))
+
+#--Checking the strength of trend and seasonality for Netflix data---#
+# FT
+ft <- 1-var(dec$random,na.rm=TRUE)/var((dec$trend+dec$random),na.rm=TRUE)
+# FS
+fs <- 1-var(dec$random,na.rm=TRUE)/var((dec$seasonal+dec$random),na.rm=TRUE)
+data.frame(cbind(ft,fs))
+```
+
+```{r}
+#---Now doing an stl decomposition---#
+decomp=stl(data,t.window = 5,s.window="periodic", robust=TRUE)
+decomp
+
+#---Plotting the stl decomposition---#
+autoplot(decomp)+
+  ggtitle("stl decomposition of Netflix data")
+```
+
+```{r}
+#---Now creating a lag-plot---#
+gglagplot(data,lags=25,set.lags = 1:25)+
+  ggtitle("Lag plots, Netflix Sales")
+
+#----Now creating an ACF plot---#
+ggAcf(data,lag.max = 30)+ggtitle("ACF plot for Netflix sales data")
+
+#---Now creating a tapered ACF plot---#
+ggtaperedacf(data,lag.max=25,calc.ci = T,level=95,nsim = 100)+
+  ggtitle("Tapered ACF plot for Netflix sales data")
+
+##################
+
+#----Nomality checking-----#
+##################
+###################
+###################
+dec$random
+# overestimating
+gghistogram(dec$random)
+ggAcf(dec$random,lag.max=20)
+```
+
+```{r}
+#---Naive modeling---#
+fitted(naive(data))
+#compare#
+autoplot(data)+autolayer(fitted(naive(data)))+ggtitle("Tracking real and naively predicted Netflix sales")
+#--extract residuals--#
+naive.model.resid=residuals(naive(data))
+gghistogram(naive.model.resid) ## underestimating
+ggAcf(naive.model.resid)
+#--another way of extracting residuals---#
+diff(sales)
+#--checking normality---#
+gghistogram(naive.model.resid)
+ggAcf(naive.model.resid,lag.max=20)
+autoplot(naive.model.resid)+ggtitle("Naive residuals showing reasonable stationarity")
+```
+
+```{r}
+netflix.ts <- data
+#---State-space ETS modeling---#
+########
+intuitive.model=ets(netflix.ts,model="AAN")
+intuitive.model
+accuracy(intuitive.model)
+#autoplot(intuitive.model)
+autoplot(fitted(intuitive.model))+autolayer(netflix.ts)+ggtitle("Comparing the intuitive ETS(AAN) fitted values to the actuals, Netflix")+ylab("Observed/Fitted")
+forecast(intuitive.model,h=10)
+autoplot(forecast(intuitive.model,h=10))+ggtitle("Extracting forecasts from the intuitive ETS(AAN), Netflix")+ylab("Values")
+
+
+best.model=ets(netflix.ts)
+best.model
+accuracy(best.model)
+#autoplot(best.model)
+autoplot(fitted(best.model))+autolayer(netflix.ts)+ggtitle("Comparing the best ETS(MAM) fitted values to the actuals, Netflix")+ylab("Observed/Fitted")
+forecast(best.model,h=10)
+autoplot(forecast(best.model,h=10))+ggtitle("Extracting forecasts from the best ETS(MAM), Netflix")+ylab("Values")
+
+##########
+##########
+#---Comparing different models---#
+##########
+##########
+
+illogical.model=ets(netflix.ts,model="ANN")
+illogical.model
+accuracy(illogical.model)
+autoplot(fitted(illogical.model))+autolayer(netflix.ts)+ggtitle("Comparing the illogical ETS(ANN) fitted values to the actuals, Netflix")+ylab("Observed/Fitted")
+
+naive.model=naive(netflix.ts)
+naive.model
+accuracy(naive.model)
+autoplot(fitted(naive.model))+autolayer(netflix.ts)+ggtitle("Comparing the naive fitted values to the actuals, Netflix")+ylab("Observed/Fitted")
+forecast(naive.model,h=10)
+autoplot(forecast(naive.model,h=10))+ggtitle("Extracting forecasts from the naive model, Netflix")+ylab("Values")
+
+
+stl.randomwalk.model=stl(netflix.ts,t.window = 5,s.window="periodic", robust=TRUE)
+stl.randomwalk.model
+
+stl.forecast=forecast(stl.randomwalk.model, h=10,method="naive",robust=FALSE)
+stl.randomwalk.model$time.series[,1]+stl.randomwalk.model$time.series[,2]
+autoplot(stl.randomwalk.model$time.series[,1]+stl.randomwalk.model$time.series[,2])+autolayer(netflix.ts)+ggtitle("Comparing the stl signal values to the actuals, Netflix")+ylab("Observed/stl.Signal")
+autoplot(stl.forecast)+ggtitle("Extracting forecasts from the stl model, Netflix")+ylab("Values")
+accuracy(stl.forecast)
+
+###################
+#---Checking residual assumptions------#
+###################
+
+checkresiduals(forecast(naive.model))
+checkresiduals(forecast(illogical.model))
+checkresiduals(forecast(intuitive.model))
+checkresiduals(forecast(best.model))
+
+###############
+#--Forced damping--#
+###############
+
+damped.model=ets(netflix.ts,model="AAN",damped = TRUE)
+damped.model
+accuracy(damped.model)
+forecast(damped.model,h=100)
+autoplot(forecast(damped.model,h=100))+ggtitle("Extracting forecasts from trend-damped AAN, Netflix")
+
+checkresiduals(damped.model)
+##############
+##############
+##############
+```
+
+```{r}
+################
+#---On simulations---#
+################
+simulate(intuitive.model)
+autoplot(netflix.ts)+
+  autolayer(simulate(illogical.model,future=F),series = "simANN1")+
+  autolayer(simulate(illogical.model,future=F),series = "simANN2")+
+  autolayer(simulate(damped.model,future=F),series = "simdamped1")+
+  autolayer(simulate(damped.model,future=F),series = "simdamped2")+ylab("Real and simulated values")+
+  ggtitle("Simulating the past, Netflix")
+  
+autoplot(netflix.ts)+
+  autolayer(simulate(illogical.model,future=T),series = "simANN1")+
+  autolayer(simulate(illogical.model,future=T),series = "simANN2")+
+  autolayer(simulate(damped.model,future=T),series = "simdamped1")+
+  autolayer(simulate(damped.model,future=T),series = "simdamped2")+ylab("Real and simulated values")+
+  ggtitle("Simulating the future, Netflix")
+######
+#####
+MAM1=simulate(best.model,future=F)
+MAM2=simulate(best.model,future=F)
+MAM3=simulate(best.model,future=F)
+MAM4=simulate(best.model,future=F)
+
+AAN1=simulate(intuitive.model,future=F)
+AAN2=simulate(intuitive.model,future=F)
+AAN3=simulate(intuitive.model,future=F)
+AAN4=simulate(intuitive.model,future=F)
+
+ANN1=simulate(illogical.model,future=F)
+ANN2=simulate(illogical.model,future=F)
+ANN3=simulate(illogical.model,future=F)
+ANN4=simulate(illogical.model,future=F)
+
+#Naive1=simulate(naive.model,future=F)
+#Naive2=simulate(naive.model,future=F)
+#Naive3=simulate(naive.model,future=F)
+#Naive4=simulate(naive.model,future=F)
+
+data=ts(cbind(MAM1,MAM2,MAM3,MAM4,AAN1,AAN2,AAN3,AAN4,ANN1,ANN2,ANN3,ANN4,netflix.ts),start=c(2000,1),frequency = 4)
+
+
+dissimilarity=diss(data,METHOD="COR")
+dissimilarity
+
+hc.dpred <- hclust(dissimilarity)
+plot(hc.dpred,main="Cluster dendogram, Netflix, Correlation distance")
+```
+
